@@ -16,6 +16,8 @@ IMAGES_DIR = './'
 validated_image_list = os.listdir("./validated_images/")
 
 GRAPH_FILENAME = "facenet_celeb_ncs.graph"
+CASC_FILENAME = "casc.xml"
+faceCascade = cv2.CascadeClassifier(CASC_FILENAME)
 
 # name of the opencv window
 CV_WINDOW_NAME = "FaceNet- Multiple people"
@@ -168,6 +170,9 @@ def run_camera(valid_output, validated_image_filename, graph):
         frame_count += 1
         frame_name = 'camera frame ' + str(frame_count)
 
+        if not find_any_face(vid_image):
+            print('Haar Classifier did not found any image')
+            break
         # run a single inference on the image and overwrite the
         # boxes and labels
         test_output = run_inference(vid_image, graph)
@@ -209,6 +214,13 @@ def run_camera(valid_output, validated_image_filename, graph):
     if (found_match):
         cv2.imshow(CV_WINDOW_NAME, vid_image)
         cv2.waitKey(0)
+
+
+
+
+def find_any_face(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return faceCascade.detectMultiScale(gray,scaleFactor=1.2,minNeighbors=5,minSize=(30, 30))
 
 
 # This function is called from the entry point to do
