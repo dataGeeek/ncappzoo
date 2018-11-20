@@ -170,7 +170,7 @@ def run_camera(valid_output, validated_image_filename, graph):
         frame_count += 1
         frame_name = 'camera frame ' + str(frame_count)
 
-        if not find_any_face(vid_image):
+        if len(find_any_face(vid_image)) == 0:
             print('Haar Classifier did not found any image')
             continue
         # run a single inference on the image and overwrite the
