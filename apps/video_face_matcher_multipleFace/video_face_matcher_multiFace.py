@@ -171,6 +171,7 @@ def run_camera(valid_output, validated_image_filename, graph):
         frame_name = 'camera frame ' + str(frame_count)
 
         if len(find_any_face(vid_image)) == 0:
+            cv2.imshow(CV_WINDOW_NAME, vid_image)
             print('Haar Classifier did not found any image')
             continue
         # run a single inference on the image and overwrite the
