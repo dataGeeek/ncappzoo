@@ -201,6 +201,7 @@ def run_camera(valid_output, validated_image_filename, graph):
         else:
             found_match = False
             print('FAIL!  File ' + frame_name + ' does not match any image.')
+            save_image(vid_image)
 
         overlay_on_image(vid_image, frame_name, found_match)
 
@@ -220,8 +221,6 @@ def run_camera(valid_output, validated_image_filename, graph):
                 break
 
         # save files with a matched face, which are unknown to us
-        if not found_match:
-            save_image(vid_image)
 
     if (found_match):
         cv2.imshow(CV_WINDOW_NAME, vid_image)
