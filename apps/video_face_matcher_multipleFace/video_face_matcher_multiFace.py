@@ -136,7 +136,7 @@ def handle_keys(raw_key):
 # graph is the ncsdk Graph object initialized with the facenet graph file
 #   which we will run the inference on.
 # returns None
-def run_camera(valid_output, validated_image_filename, graph):
+def run_camera(valid_output, graph):
     camera_device = cv2.VideoCapture(CAMERA_INDEX)
     camera_device.set(cv2.CAP_PROP_FRAME_WIDTH, REQUEST_CAMERA_WIDTH)
     camera_device.set(cv2.CAP_PROP_FRAME_HEIGHT, REQUEST_CAMERA_HEIGHT)
@@ -214,7 +214,6 @@ def run_camera(valid_output, validated_image_filename, graph):
 # This function is called from the entry point to do
 # all the work of the program
 def main():
-    use_camera = True
 
     # Get a list of ALL the sticks that are plugged in
     # we need at least one
@@ -243,15 +242,7 @@ def main():
     for i in validated_image_list:
         validated_image = cv2.imread("./validated_images/"+i)
         valid_output.append(run_inference(validated_image, graph))
-    if (use_camera):
-        run_camera(valid_output, validated_image_list, graph)
-    else:
-        input_image_filename_list = os.listdir(IMAGES_DIR)
-        input_image_filename_list = [i for i in input_image_filename_list if i.endswith('.jpg')]
-        if (len(input_image_filename_list) < 1):
-            print('No .jpg files found')
-            return 1
-        run_images(valid_output, validated_image_list, graph, input_image_filename_list)
+    run_camera(valid_output, validated_image_list, graph)
 
     # Clean up the graph and the device
     graph.DeallocateGraph()
