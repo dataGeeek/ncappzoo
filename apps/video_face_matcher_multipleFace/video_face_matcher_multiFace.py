@@ -4,21 +4,16 @@
 # License: MIT See LICENSE file in root directory.
 
 
+import argparse
+import cv2
 from mvnc import mvncapi as mvnc
 import numpy
-import cv2
-import sys
 import os
+import sys
 from time import localtime, strftime
 
 EXAMPLES_BASE_DIR = '../../'
 IMAGES_DIR = './'
-
-validated_image_list = os.listdir("./validated_images/")
-
-GRAPH_FILENAME = "facenet_celeb_ncs.graph"
-CASC_FILENAME = "casc.xml"
-faceCascade = cv2.CascadeClassifier(CASC_FILENAME)
 
 # name of the opencv window
 CV_WINDOW_NAME = "FaceNet- Multiple people"
@@ -30,7 +25,6 @@ REQUEST_CAMERA_HEIGHT = 480
 # the same face will return 0.0
 # different faces return higher numbers
 # this is NOT between 0.0 and 1.0
-FACE_MATCH_THRESHOLD = 0.8
 
 
 # Run an inference on the passed image
@@ -65,9 +59,9 @@ def run_inference(image_to_classify, facenet_graph):
 def overlay_on_image(display_image, image_info, matching):
     rect_width = 10
     offset = int(rect_width / 2)
-    if (image_info != None):
+    if image_info is not None:
         cv2.putText(display_image, image_info, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-    if (matching):
+    if matching:
         # match, green rectangle
         cv2.rectangle(display_image, (0 + offset, 0 + offset),
                       (display_image.shape[1] - offset - 1, display_image.shape[0] - offset - 1),
@@ -109,7 +103,7 @@ def preprocess_image(src):
 # determine if two images are of matching faces based on the
 # the network output for both images.
 def face_match(face1_output, face2_output):
-    if (len(face1_output) != len(face2_output)):
+    if len(face1_output) != len(face2_output):
         print('length mismatch in face_match')
         return False
     total_diff = 0
@@ -125,7 +119,7 @@ def face_match(face1_output, face2_output):
 # returns False if program should end, or True if should continue
 def handle_keys(raw_key):
     ascii_code = raw_key & 0xFF
-    if ((ascii_code == ord('q')) or (ascii_code == ord('Q'))):
+    if (ascii_code == ord('q')) or (ascii_code == ord('Q')):
         return False
 
     return True
@@ -140,7 +134,7 @@ def handle_keys(raw_key):
 # graph is the ncsdk Graph object initialized with the facenet graph file
 #   which we will run the inference on.
 # returns None
-def run_camera(valid_output, validated_image_filename, graph):
+def run_camera(valid_output, validated_image_list, graph, capture_path, classifier_path, threshold, window):
     camera_device = cv2.VideoCapture(CAMERA_INDEX)
     camera_device.set(cv2.CAP_PROP_FRAME_WIDTH, REQUEST_CAMERA_WIDTH)
     camera_device.set(cv2.CAP_PROP_FRAME_HEIGHT, REQUEST_CAMERA_HEIGHT)
@@ -149,7 +143,7 @@ def run_camera(valid_output, validated_image_filename, graph):
     actual_camera_height = camera_device.get(cv2.CAP_PROP_FRAME_HEIGHT)
     print('actual camera resolution: ' + str(actual_camera_width) + ' x ' + str(actual_camera_height))
 
-    if ((camera_device == None) or (not camera_device.isOpened())):
+    if (camera_device is None) or (not camera_device.isOpened()):
         print('Could not open camera.  Make sure it is plugged in.')
         print('Also, if you installed python opencv via pip or pip3 you')
         print('need to uninstall it and install from source with -D WITH_V4L=ON')
@@ -159,32 +153,37 @@ def run_camera(valid_output, validated_image_filename, graph):
     frame_count = 0
 
     cv2.namedWindow(CV_WINDOW_NAME)
+    face_cascade = cv2.CascadeClassifier(classifier_path)
 
     found_match = False
 
     while True:
         # Read image from camera,
         ret_val, vid_image = camera_device.read()
-        if (not ret_val):
+        if not ret_val:
             print("No image from camera, exiting")
             break
 
         frame_count += 1
         frame_name = 'camera frame ' + str(frame_count)
-        faces = find_any_face(vid_image)
+        faces = find_any_face(vid_image, face_cascade)
 
-        if len(faces) == 0:
-            cv2.imshow(CV_WINDOW_NAME, vid_image)
-            raw_key = cv2.waitKey(1)
-            if (raw_key != -1):
-                if (handle_keys(raw_key) == False):
-                    print('user pressed Q')
-                    break
+        # if no face found by haar classifier, just print the raw image, and continue with next image.
+        # If one is found, run comparison with known faces.
+        if len(faces) == 0 and window:
+            if print_image_and_wait_for_exit(vid_image):
+                break
             print('Haar Classifier did not found any face')
             continue
+
+        elif len(faces) == 0 and not window:
+            print('Haar Classifier did not found any face')
+            continue
+
         else:
             for (x, y, w, h) in faces:
-                cv2.rectangle(vid_image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                cv2.rectangle(vid_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
         # run a single inference on the image and overwrite the
         # boxes and labels
         test_output = run_inference(vid_image, graph)
@@ -198,55 +197,86 @@ def run_camera(valid_output, validated_image_filename, graph):
                 min_distance = distance
                 min_index = i
 
-        if (min_distance <= FACE_MATCH_THRESHOLD):
+        if min_distance <= threshold:
             print('PASS!  File ' + frame_name + ' matches ' + validated_image_list[min_index])
             found_match = True
 
         else:
             found_match = False
             print('FAIL!  File ' + frame_name + ' does not match any image.')
-            save_image(vid_image)
+            save_image(vid_image, capture_path)
 
         overlay_on_image(vid_image, frame_name, found_match)
 
-        # check if the window is visible, this means the user hasn't closed
-        # the window via the X button
-        prop_val = cv2.getWindowProperty(CV_WINDOW_NAME, cv2.WND_PROP_ASPECT_RATIO)
-        if (prop_val < 0.0):
-            print('window closed')
+        if print_image_and_wait_for_exit(vid_image):
             break
 
-        # display the results and wait for user to hit a key
-        cv2.imshow(CV_WINDOW_NAME, vid_image)
-        raw_key = cv2.waitKey(1)
-        if (raw_key != -1):
-            if (handle_keys(raw_key) == False):
-                print('user pressed Q')
-                break
-
-        # save files with a matched face, which are unknown to us
-
-    if (found_match):
+    if found_match and window:
         cv2.imshow(CV_WINDOW_NAME, vid_image)
         cv2.waitKey(0)
 
 
-def find_any_face(image):
+def find_any_face(image, classifier):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    return faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(30, 30))
+    return classifier.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(30, 30))
 
 
-def save_image(image):
+def save_image(image, path):
     photo = (os.path.dirname(os.path.realpath(__file__))
-             + "/captures/image_"
-             + strftime("%Y_%m_%d_%H_%M_%S", localtime()) + ".jpg")
+             + path
+             + 'image_'
+             + strftime('%Y_%m_%d_%H_%M_%S', localtime()) + '.jpg')
     cv2.imwrite(photo, image)
+
+    # check if the window is visible, this means the user hasn't closed
+    # the window via the X button
+    # display the results and wait for user to hit a key
+
+
+def print_image_and_wait_for_exit(image):
+    prop_val = cv2.getWindowProperty(CV_WINDOW_NAME, cv2.WND_PROP_ASPECT_RATIO)
+    if prop_val < 0.0:
+        print('window closed')
+        return True
+    cv2.imshow(CV_WINDOW_NAME, image)
+    raw_key = cv2.waitKey(1)
+    if raw_key != -1:
+        if not handle_keys(raw_key):
+            print('user pressed Q')
+            return True
 
 
 # This function is called from the entry point to do
 # all the work of the program
 def main():
-    use_camera = True
+    parser = argparse.ArgumentParser(
+        description="Pragram to detect unknown faces and captures them")
+
+    parser.add_argument('-c', '--capture', type=str,
+                        default='~/capture/',
+                        help="Path where pictures of unknown faces shall be stored.")
+
+    parser.add_argument('-cl', '--classifier', type=str,
+                        default='casc.xml',
+                        help="Path where haar classifier is located.")
+
+    parser.add_argument('-g', '--graph', type=str,
+                        default='facenet_celeb_ncs.graph',
+                        help="Path to graph file.")
+
+    parser.add_argument('-t', '--threshold', type=float,
+                        default=0.8,
+                        help="PThreshold for classifying an face as similar enough.")
+
+    parser.add_argument('-v', '--validated', type=str,
+                        default='./validated_images/',
+                        help="Path to folder with validated images")
+
+    parser.add_argument('-w', '--window', type=bool,
+                        default=True,
+                        help="Run program with window.")
+
+    args = parser.parse_args()
 
     # Get a list of ALL the sticks that are plugged in
     # we need at least one
@@ -262,7 +292,7 @@ def main():
     device.OpenDevice()
 
     # The graph file that was created with the ncsdk compiler
-    graph_file_name = GRAPH_FILENAME
+    graph_file_name = args.graph
 
     # read in the graph file to memory buffer
     with open(graph_file_name, mode='rb') as f:
@@ -271,19 +301,13 @@ def main():
     # create the NCAPI graph instance from the memory buffer containing the graph file.
     graph = device.AllocateGraph(graph_in_memory)
 
+    validated_image_list = os.listdir(args.validated)
     valid_output = []
     for i in validated_image_list:
-        validated_image = cv2.imread("./validated_images/" + i)
+        validated_image = cv2.imread(args.validated + i)
         valid_output.append(run_inference(validated_image, graph))
-    if (use_camera):
-        run_camera(valid_output, validated_image_list, graph)
-    else:
-        input_image_filename_list = os.listdir(IMAGES_DIR)
-        input_image_filename_list = [i for i in input_image_filename_list if i.endswith('.jpg')]
-        if (len(input_image_filename_list) < 1):
-            print('No .jpg files found')
-            return 1
-        run_images(valid_output, validated_image_list, graph, input_image_filename_list)
+
+    run_camera(valid_output, validated_image_list, graph, args.capture, args.classifier, args.threshold, args.window)
 
     # Clean up the graph and the device
     graph.DeallocateGraph()
