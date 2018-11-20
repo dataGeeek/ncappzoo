@@ -171,16 +171,20 @@ def run_camera(valid_output, validated_image_filename, graph):
 
         frame_count += 1
         frame_name = 'camera frame ' + str(frame_count)
+        faces = find_any_face(vid_image)
 
-        if len(find_any_face(vid_image)) == 0:
+        if len(faces) == 0:
             cv2.imshow(CV_WINDOW_NAME, vid_image)
             raw_key = cv2.waitKey(1)
             if (raw_key != -1):
                 if (handle_keys(raw_key) == False):
                     print('user pressed Q')
                     break
-            print('Haar Classifier did not found any image')
+            print('Haar Classifier did not found any face')
             continue
+        else:
+            for (x, y, w, h) in faces:
+                cv2.rectangle(vid_image, (x, y), (x+w, y+h), (0, 255, 0), 2)
         # run a single inference on the image and overwrite the
         # boxes and labels
         test_output = run_inference(vid_image, graph)
