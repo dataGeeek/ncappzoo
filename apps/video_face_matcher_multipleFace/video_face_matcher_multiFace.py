@@ -9,8 +9,9 @@ import numpy
 import cv2
 import sys
 import os
+from time import localtime, strftime
 
-EXAMPLES_BASE_DIR='../../'
+EXAMPLES_BASE_DIR = '../../'
 IMAGES_DIR = './'
 
 validated_image_list = os.listdir("./validated_images/")
@@ -39,7 +40,6 @@ FACE_MATCH_THRESHOLD = 0.8
 # ssd_mobilenet_graph is the Graph object from the NCAPI which will
 #    be used to peform the inference.
 def run_inference(image_to_classify, facenet_graph):
-
     # get a resized version of the image that is the dimensions
     # SSD Mobile net expects
     resized_image = preprocess_image(image_to_classify)
@@ -64,18 +64,18 @@ def run_inference(image_to_classify, facenet_graph):
 # returns None
 def overlay_on_image(display_image, image_info, matching):
     rect_width = 10
-    offset = int(rect_width/2)
+    offset = int(rect_width / 2)
     if (image_info != None):
         cv2.putText(display_image, image_info, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
     if (matching):
         # match, green rectangle
-        cv2.rectangle(display_image, (0+offset, 0+offset),
-                      (display_image.shape[1]-offset-1, display_image.shape[0]-offset-1),
+        cv2.rectangle(display_image, (0 + offset, 0 + offset),
+                      (display_image.shape[1] - offset - 1, display_image.shape[0] - offset - 1),
                       (0, 255, 0), 10)
     else:
         # not a match, red rectangle
-        cv2.rectangle(display_image, (0+offset, 0+offset),
-                      (display_image.shape[1]-offset-1, display_image.shape[0]-offset-1),
+        cv2.rectangle(display_image, (0 + offset, 0 + offset),
+                      (display_image.shape[1] - offset - 1, display_image.shape[0] - offset - 1),
                       (0, 0, 255), 10)
 
 
@@ -87,6 +87,7 @@ def whiten_image(source_image):
     whitened_image = numpy.multiply(numpy.subtract(source_image, source_mean), 1 / std_adjusted)
     return whitened_image
 
+
 # create a preprocessed image from the source image that matches the
 # network expectations and return it
 def preprocess_image(src):
@@ -95,14 +96,15 @@ def preprocess_image(src):
     NETWORK_HEIGHT = 160
     preprocessed_image = cv2.resize(src, (NETWORK_WIDTH, NETWORK_HEIGHT))
 
-    #convert to RGB
+    # convert to RGB
     preprocessed_image = cv2.cvtColor(preprocessed_image, cv2.COLOR_BGR2RGB)
 
-    #whiten
+    # whiten
     preprocessed_image = whiten_image(preprocessed_image)
 
     # return the preprocessed image
     return preprocessed_image
+
 
 # determine if two images are of matching faces based on the
 # the network output for both images.
@@ -145,13 +147,13 @@ def run_camera(valid_output, validated_image_filename, graph):
 
     actual_camera_width = camera_device.get(cv2.CAP_PROP_FRAME_WIDTH)
     actual_camera_height = camera_device.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    print ('actual camera resolution: ' + str(actual_camera_width) + ' x ' + str(actual_camera_height))
+    print('actual camera resolution: ' + str(actual_camera_width) + ' x ' + str(actual_camera_height))
 
     if ((camera_device == None) or (not camera_device.isOpened())):
-        print ('Could not open camera.  Make sure it is plugged in.')
-        print ('Also, if you installed python opencv via pip or pip3 you')
-        print ('need to uninstall it and install from source with -D WITH_V4L=ON')
-        print ('Use the provided script: install-opencv-from_source.sh')
+        print('Could not open camera.  Make sure it is plugged in.')
+        print('Also, if you installed python opencv via pip or pip3 you')
+        print('need to uninstall it and install from source with -D WITH_V4L=ON')
+        print('Use the provided script: install-opencv-from_source.sh')
         return
 
     frame_count = 0
@@ -160,7 +162,7 @@ def run_camera(valid_output, validated_image_filename, graph):
 
     found_match = False
 
-    while True :
+    while True:
         # Read image from camera,
         ret_val, vid_image = camera_device.read()
         if (not ret_val):
@@ -186,16 +188,16 @@ def run_camera(valid_output, validated_image_filename, graph):
         min_distance = 100
         min_index = -1
 
-        for i in range(0,len(valid_output)):
+        for i in range(0, len(valid_output)):
             distance = face_match(valid_output[i], test_output)
             if distance < min_distance:
                 min_distance = distance
-                min_index = i 
+                min_index = i
 
-        if (min_distance<=FACE_MATCH_THRESHOLD):
+        if (min_distance <= FACE_MATCH_THRESHOLD):
             print('PASS!  File ' + frame_name + ' matches ' + validated_image_list[min_index])
             found_match = True
-        
+
         else:
             found_match = False
             print('FAIL!  File ' + frame_name + ' does not match any image.')
@@ -217,16 +219,25 @@ def run_camera(valid_output, validated_image_filename, graph):
                 print('user pressed Q')
                 break
 
+        # save files with a matched face, which are unknown to us
+        if not found_match:
+            save_image(vid_image)
+
     if (found_match):
         cv2.imshow(CV_WINDOW_NAME, vid_image)
         cv2.waitKey(0)
 
 
-
-
 def find_any_face(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    return faceCascade.detectMultiScale(gray,scaleFactor=1.2,minNeighbors=5,minSize=(30, 30))
+    return faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(30, 30))
+
+
+def save_image(image):
+    photo = (os.path.dirname(os.path.realpath(__file__))
+             + "/captures/image_"
+             + strftime("%Y_%m_%d_%H_%M_%S", localtime()) + ".jpg")
+    cv2.imwrite(photo, image)
 
 
 # This function is called from the entry point to do
@@ -259,7 +270,7 @@ def main():
 
     valid_output = []
     for i in validated_image_list:
-        validated_image = cv2.imread("./validated_images/"+i)
+        validated_image = cv2.imread("./validated_images/" + i)
         valid_output.append(run_inference(validated_image, graph))
     if (use_camera):
         run_camera(valid_output, validated_image_list, graph)
